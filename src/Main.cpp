@@ -19,6 +19,17 @@
 #include <Constants.h>
 #include "settings.h"
 
+volatile int rpmCount    = 0;
+unsigned long timeOld    = 0;
+unsigned long timeNew    = 0;
+float avgRPM             = 0;
+int count                = 0;
+float RPM                = 0;
+
+const int freq = 5000;
+const int pwmChannel = 0;
+const int resolution = 8;
+
 // Stepper Motor Serial
 HardwareSerial stepperSerial(2);
 TMC2208Stepper driver(&SERIAL_PORT, R_SENSE);  // Hardware Serial
@@ -120,14 +131,19 @@ void setup() {
   pinMode(currentBoard.shiftUpPin, INPUT_PULLUP);    // Push-Button with input Pullup
   pinMode(currentBoard.shiftDownPin, INPUT_PULLUP);  // Push-Button with input Pullup
   pinMode(LED_PIN, OUTPUT);
+  pinMode(BRAKE_LED, OUTPUT);
   pinMode(currentBoard.enablePin, OUTPUT);
   pinMode(currentBoard.dirPin, OUTPUT);   // Stepper Direction Pin
   pinMode(currentBoard.stepPin, OUTPUT);  // Stepper Step Pin
+  pinMode(CADENCE_PIN, INPUT_PULLUP); //Added for pin cadence detection
   digitalWrite(currentBoard.enablePin,
                HIGH);  // Should be called a disable Pin - High Disables FETs
   digitalWrite(currentBoard.dirPin, LOW);
   digitalWrite(currentBoard.stepPin, LOW);
   digitalWrite(LED_PIN, LOW);
+
+  ledcSetup(pwmChannel, freq, resolution);
+  ledcAttachPin(BRAKE_PIN, pwmChannel);
 
   ss2k->setupTMCStepperDriver();
 
@@ -150,6 +166,7 @@ void setup() {
   // Setup Interrupts so shifters work anytime
   attachInterrupt(digitalPinToInterrupt(currentBoard.shiftUpPin), ss2k->shiftUp, CHANGE);
   attachInterrupt(digitalPinToInterrupt(currentBoard.shiftDownPin), ss2k->shiftDown, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(CADENCE_PIN), ss2k->cadenceUpdate, CHANGE);
   digitalWrite(LED_PIN, HIGH);
 
   xTaskCreatePinnedToCore(SS2K::maintenanceLoop,     /* Task function. */
@@ -172,6 +189,53 @@ void SS2K::maintenanceLoop(void *pvParameters) {
   static bool isScanning              = false;
 
   while (true) {
+    // spd = 15.4;
+
+    // SS2K_LOG(MAIN_LOG_TAG, "timeOld: ", timeOld);
+
+    detachInterrupt(CADENCE_PIN);
+    // timeNew = millis() - timeOld;
+    RPM = 60*100/(millis() - timeOld)*rpmCount;
+    timeOld = millis();
+    rpmCount = 0;
+    
+    avgRPM = avgRPM + RPM;
+    if (count > 4){
+      avgRPM = avgRPM / count;
+      if (avgRPM == 0){ //required during testing. now redundant?
+        avgRPM = avgRPM;
+        count = 0;
+      }
+    else {
+      rtConfig->cad.setValue(avgRPM);
+      rtConfig->watts.setValue(avgRPM); //need to find a suitable algorithm!
+
+      count = 0;
+    }
+    }
+    count++;
+    attachInterrupt(digitalPinToInterrupt(CADENCE_PIN), ss2k->cadenceUpdate, CHANGE);
+
+    float floatPWM = rtConfig->getCurrentIncline(); //get incline value
+    int   intPWM = static_cast<int>(floatPWM);    //convert to int
+    intPWM = intPWM / 2;
+    intPWM = 255 - intPWM;         //KICKR MOSFET Brake on = LOW          
+    if (intPWM > 255){
+      intPWM = 255;
+    }
+    if (intPWM < 0){
+            intPWM = 0;
+    }                 //convert to value between 0 - 255
+    if (intPWM > 240){
+      digitalWrite(BRAKE_LED, LOW);
+    }
+    else{
+      digitalWrite(BRAKE_LED, HIGH);
+    }
+    ledcWrite(pwmChannel, intPWM);
+    // SS2K_LOG(MAIN_LOG_TAG, "PWM Value: %d", intPWM);
+    // SS2K_LOG(MAIN_LOG_TAG, "floatPWM Value: %f", floatPWM);
+
     vTaskDelay(5 / portTICK_RATE_MS);
 
     // Run what used to be in the BLECommunications Task.
@@ -482,6 +546,17 @@ void IRAM_ATTR SS2K::shiftDown() {  // Handle the shift down interrupt
     }  // Probably Triggered by EMF, reset the debounce
   }
 }
+
+void IRAM_ATTR SS2K::cadenceUpdate() {  // Handle the cadenceUpdate Interrupt for getting the cadence of a digital pin
+  if (ss2k->deBounce() && !rtConfig->getFTMSMode()) {
+    if (!digitalRead(CADENCE_PIN)) {   //this line is copied from above and seems to be required for debouncing correctly, but reduces accuracy of the optical sensor!
+      rpmCount++;
+  } else {
+      ss2k->lastDebounceTime = 0;
+    }  // Probably Triggered by EMF, reset the debounce
+  }
+}
+
 
 void SS2K::resetIfShiftersHeld() {
   if ((digitalRead(currentBoard.shiftUpPin) == LOW) && (digitalRead(currentBoard.shiftDownPin) == LOW)) {

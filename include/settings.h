@@ -8,7 +8,7 @@
 #pragma once
 
 // Update firmware on boot?
-#define AUTO_FIRMWARE_UPDATE true
+#define AUTO_FIRMWARE_UPDATE false
 
 // Default Bluetooth WiFi and MDNS Name
 const char* const DEVICE_NAME = "SmartSpin2k";
@@ -133,6 +133,15 @@ const char* const DEFAULT_PASSWORD = "password";
 
 // ID Voltage on pin 34. Values are 0-4095 (0-3.3v)
 #define r1_VERSION_VOLTAGE 0
+
+//Hardware pin for cadence counter
+#define CADENCE_PIN 23
+
+// Hardware pin for braking PWM
+#define BRAKE_PIN 22  //
+
+// Hardware pin for red LED on KICKR
+#define BRAKE_LED 21 //
 
 // Hardware pin for Shift Up
 #define r1_SHIFT_UP_PIN 19

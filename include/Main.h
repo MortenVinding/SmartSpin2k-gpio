@@ -46,6 +46,7 @@ class SS2K {
   static void IRAM_ATTR maintenanceLoop(void *pvParameters);
   static void IRAM_ATTR shiftUp();
   static void IRAM_ATTR shiftDown();
+  static void IRAM_ATTR cadenceUpdate();
   static void moveStepper();
   void resetIfShiftersHeld();
   void startTasks();

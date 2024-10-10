@@ -85,8 +85,8 @@ void BLECommunications() {
 
     // Set outputs to zero if we're not simulating or have connected devices.
     if (!spinBLEClient.connectedPM && !hr2p && !rtConfig->watts.getSimulate() && !rtConfig->cad.getSimulate()) {
-      rtConfig->cad.setValue(0);
-      rtConfig->watts.setValue(0);
+      //rtConfig->cad.setValue(0);
+      //rtConfig->watts.setValue(0);
     }
     if (!spinBLEClient.connectedHRM && !rtConfig->hr.getSimulate()) {
       rtConfig->hr.setValue(0);
