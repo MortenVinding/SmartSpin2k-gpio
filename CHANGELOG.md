@@ -9,11 +9,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Hardware
+
+
+## [25.1.12]
+
+### Added
+
+### Changed
+- All New HTML Files!
+
+### Hardware
+
+
+## [25.1.10]
+
+### Added
+
+### Changed
+- Added checks for IC SE Bike Connection. 
+
+### Hardware
+
+
+## [24.12.8]
+
+### Added
+
+### Changed
+
+### Hardware
+- Added Dmasun bike
+- Added Equinox Soul Cycle
+- Added Sole SB700
+- added bike mount for Joroto X2 and any other bike with hex shape front tube
+- replaced old inserts for Joroto X2 with new 60.5
+
+## [24.12.7]
+
+### Added
+
+### Changed
+- Fixes homing not being removed after powertable reset.
+- Shifting will always abort homing, even if homing hasn't been preformed yet. 
+
+### Hardware
+
+## [24.11.25]
+
+### Added
+
+### Changed
+
+### Hardware
+- Added rubber band holder to Peloton mount.
+- Decreased Peloton insert size slightly. 
+- Added rubber band holder to IC4/C6 mount.
+- Added Sunny B1805 Bike. 
+
+## [24.11.16]
+
+### Added
+
+### Changed
+
+### Hardware
+- Decreased tolerances around bearings and gears.
+
+
+## [24.11.10]
+
+### Added
+
+### Changed
+- Multiple Homing refinements.
+- Working with resistance mode on QZ & Peloton
+- PowerTable Import via Custom Characteristic fixed. 
+- Check for cadence (before homing) so that we don't home when nobody is around.
+- Don't depower the stepper if there is cadence. 
+
+### Hardware
+- Added Sunny B1805 insert. 
+
+## [24.11.7]
+
+### Added
+
+### Changed
+- Homing refinements.
+- Resistance shifting improvement.
+- Reduced Peloton logging to 1/sec.
+
+### Hardware
+
+## [24.11.5]
+
+### Added
+- Knob homing if calibrate trainer is selected in an app.
+
+### Changed
+- Added backing off of the stop before we test to prevent runaway grinding during homing. 
+- User can abort homing by pressing shifter. 
+
+### Hardware
+
+## [24.10.30]
+
+### Added
+
 - Added pass through shifting in both ERG and SIM mode.
 - Refined and added BLE custom characteristics for upcoming configuration app.
 - Added CSC Service to BLE server.
 - Added Yosuda-007C.
 - Updated wiki banner.
+- Added automatic update of Changelog sections on pull request to develop. 
+- Added support for the Zwift gear display.
 
 ### Changed
 
@@ -55,7 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a final test to check if ERG mode has commanded a move in the proper direction.
 - Aligned the values between the config app and web interface.
 - Added ability to send target watts through the custom characteristic. 
-- Added a final test to check if ERG mode has commanded a move in the proper direction. 
+- Added a final test to check if ERG mode has commanded a move in the proper direction.
+- Cleaned up targetPosition to make it easier to understand. 
 
 ### Hardware
 

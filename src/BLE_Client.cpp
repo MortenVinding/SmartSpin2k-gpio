@@ -13,6 +13,7 @@ appearance: 1156, manufacturer data: 640302018743, serviceUUID:
 
 #include "Main.h"
 #include "BLE_Common.h"
+#include "BLE_Fitness_Machine_Service.h"
 #include "SS2KLog.h"
 
 #include <ArduinoJson.h>
@@ -105,6 +106,16 @@ void bleClientTask(void *pvParameters) {
         }
       }
     }
+    // Spin Down process for the Server. It's here because it needs to be non-blocking for the maintenance loop.
+    // Checking for cadence also so that we don't home when nobody is around. 
+    if (spinBLEServer.spinDownFlag && rtConfig->cad.getValue()) {
+      if (spinBLEServer.spinDownFlag >= 2) {  // Home Both Directions
+        ss2k->goHome(true);
+      } else {  // Startup Homing 
+        ss2k->goHome(false);
+      }
+      spinBLEServer.spinDownFlag = 0;
+    }
   }
 }
 
@@ -120,9 +131,8 @@ bool SpinBLEClient::connectToServer() {
   for (int i = 0; i < NUM_BLE_DEVICES; i++) {
     if (spinBLEClient.myBLEDevices[i].doConnect == true) {   // Client wants to be connected
       if (spinBLEClient.myBLEDevices[i].advertisedDevice) {  // Client is assigned
-        // If this device is advertising HR service AND not advertising FTMS service AND there is no connected PM AND the next slot is set to connect, connect that one first and
-        // connect the HRM last.
-        // if (spinBLEClient.myBLEDevices[i].advertisedDevice->isAdvertisingService(HEARTSERVICE_UUID) &&
+        // If this device is advertising HR service AND not advertising FTMS service AND there is no connected PM AND the next slot is set to connect, connect that one first
+        // and connect the HRM last. if (spinBLEClient.myBLEDevices[i].advertisedDevice->isAdvertisingService(HEARTSERVICE_UUID) &&
         //     (!spinBLEClient.myBLEDevices[i].advertisedDevice->isAdvertisingService(FITNESSMACHINESERVICE_UUID)) && (!connectedPM) &&
         //     (spinBLEClient.myBLEDevices[i + 1].doConnect == true)) {
         //   myDevice      = spinBLEClient.myBLEDevices[i + 1].advertisedDevice;
@@ -595,7 +605,7 @@ void SpinBLEClient::FTMSControlPointWrite(const uint8_t *pData, int length) {
         const int kLogBufCapacity = length + 40;
         char logBuf[kLogBufCapacity];
         if (modData[0] == FitnessMachineControlPointProcedure::SetIndoorBikeSimulationParameters) {  // use virtual Shifting
-          int incline = ss2k->targetPosition / userConfig->getInclineMultiplier();
+          int incline = ss2k->getTargetPosition() / userConfig->getInclineMultiplier();
           modData[3]  = (uint8_t)(incline & 0xff);
           modData[4]  = (uint8_t)(incline >> 8);
           writeCharacteristic->writeValue(modData, length);
@@ -636,22 +646,45 @@ void SpinBLEClient::postConnect() {
         }
 
         if ((_BLEd.charUUID == FITNESSMACHINEINDOORBIKEDATA_UUID)) {
+          SS2K_LOG(BLE_CLIENT_LOG_TAG, "Updating Connection Params for: %s", _BLEd.peerAddress.toString().c_str());
+          BLEDevice::getServer()->updateConnParams(pClient->getConnId(), 100, 100, 2, 1000);
+          spinBLEClient.handleBattInfo(pClient, true);
+          
+          auto featuresCharacteristic = pClient->getService(FITNESSMACHINESERVICE_UUID)->getCharacteristic(FITNESSMACHINEFEATURE_UUID);
+          if (featuresCharacteristic == nullptr) {
+            SS2K_LOG(BLE_CLIENT_LOG_TAG, "Failed to find FTMS features characteristic UUID: %s", FITNESSMACHINEFEATURE_UUID.toString().c_str());
+            return;
+          }
+
+          if (featuresCharacteristic->canRead()) {
+            auto value = featuresCharacteristic->readValue();
+            if (value.size() < sizeof(uint64_t)) {
+              SS2K_LOG(BLE_CLIENT_LOG_TAG, "Failed to read FTMS features characteristic");
+              return;
+            }
+
+            // We're only interested in the machine fitness features, not the target setting features.
+            auto features = *reinterpret_cast<const uint32_t *>(value.data());
+            if (!(features & FitnessMachineFeatureFlags::Types::ElapsedTimeSupported) || !(features & FitnessMachineFeatureFlags::Types::RemainingTimeSupported)) {
+              SS2K_LOG(BLE_CLIENT_LOG_TAG, "FTMS Control Point StartOrResume not supported");
+              return;
+            }
+          }
+          
           NimBLERemoteCharacteristic *writeCharacteristic = pClient->getService(FITNESSMACHINESERVICE_UUID)->getCharacteristic(FITNESSMACHINECONTROLPOINT_UUID);
           if (writeCharacteristic == nullptr) {
             SS2K_LOG(BLE_CLIENT_LOG_TAG, "Failed to find FTMS control characteristic UUID: %s", FITNESSMACHINECONTROLPOINT_UUID.toString().c_str());
             return;
           }
 
-          // If we would like to control an external FTMS trainer. With most spin bikes we would want this off, but it's useful if you want to use the SmartSpin2k as an appliance.
+          // If we would like to control an external FTMS trainer. With most spin bikes we would want this off, but it's useful if you want to use the SmartSpin2k as an
+          // appliance.
           if (userConfig->getFTMSControlPointWrite()) {
             writeCharacteristic->writeValue(FitnessMachineControlPointProcedure::RequestControl, 1);
             vTaskDelay(BLE_NOTIFY_DELAY / portTICK_PERIOD_MS);
             SS2K_LOG(BLE_CLIENT_LOG_TAG, "Activated FTMS Training.");
           }
           writeCharacteristic->writeValue(FitnessMachineControlPointProcedure::StartOrResume, 1);
-          SS2K_LOG(BLE_CLIENT_LOG_TAG, "Updating Connection Params for: %s", _BLEd.peerAddress.toString().c_str());
-          BLEDevice::getServer()->updateConnParams(pClient->getConnId(), 120, 120, 2, 1000);
-          spinBLEClient.handleBattInfo(pClient, true);
         }
       }
     }
@@ -890,7 +923,7 @@ void SpinBLEAdvertisedDevice::reset() {
   if (this->isPM) spinBLEClient.connectedPM = false;
   if (this->isCSC) spinBLEClient.connectedCD = false;
   spinBLEClient.connectedSpeed = false;
-  advertisedDevice = nullptr;
+  advertisedDevice             = nullptr;
   // NimBLEAddress peerAddress;
   this->connectedClientID = BLE_HS_CONN_HANDLE_NONE;
   this->serviceUUID       = (uint16_t)0x0000;
